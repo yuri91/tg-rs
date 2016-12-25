@@ -22,14 +22,16 @@ pub mod types;
 
 pub struct Bot {
     base: String,
-    client: Client
+    client: Client,
+    offset: i64
 }
 
 impl Bot {
     pub fn new(token: &str) -> Bot {
         Bot {
             base: format!("https://api.telegram.org/bot{}/", token),
-            client: Client::new()
+            client: Client::new(),
+            offset: 0
         }
     }
     fn send(&mut self, method: &str, body: &str) -> Result<serde_json::Value> {
@@ -64,6 +66,19 @@ impl Bot {
     pub fn get_me(&mut self) -> Result<types::User> {
         let resp = self.send("getMe","")?;
         let serialized = serde_json::from_value(resp).chain_err(|| "cannot parse response of `getMe`")?;
+        Ok(serialized)
+    }
+    pub fn get_updates(&mut self) -> Result<Vec<types::Update>> {
+        #[derive(Serialize)]
+        struct GetUpdates {
+            offset: i64,
+        };
+        let body = GetUpdates { offset : self.offset};
+        let deserialized = serde_json::to_string(&body).unwrap();
+        let resp = self.send("getUpdates",&deserialized)?;
+        let serialized: Vec<types::Update> = serde_json::from_value(resp)
+            .chain_err(|| "cannot parse response of `getUpdates`")?;
+        self.offset = serialized.iter().fold(self.offset,|m,u| std::cmp::max(m,u.update_id)) + 1;
         Ok(serialized)
     }
 }

@@ -40,3 +40,17 @@ pub struct Chat {
     pub all_members_are_administrators: Option<bool>
 }
 
+// TODO: complete this
+#[derive(Clone,Debug,Deserialize)]
+pub struct Message {
+    pub message_id: u64,
+    pub from: Option<User>,
+    pub date: u64,
+    pub chat: Chat
+}
+
+#[derive(Clone,Debug,Deserialize)]
+pub struct Update {
+    pub update_id: i64,
+    pub message: Option<Message>
+}

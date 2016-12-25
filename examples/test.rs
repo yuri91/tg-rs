@@ -27,4 +27,6 @@ fn main() {
     let mut bot = Bot::new("232529554:AAG_xutLTVJvmzQ-pQp_6PNij_SCgE4uqCk");
     test_method(|| bot.get_me());
     test_method(|| bot.get_chat("57333322"));
+    test_method(|| bot.get_updates());
+    test_method(|| bot.get_updates());
 }
