@@ -1,8 +1,13 @@
 #![feature(proc_macro)]
+#![feature(conservative_impl_trait)]
+
+#[macro_use]
+extern crate log;
 
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+extern crate serde;
 
 extern crate hyper;
 
@@ -13,17 +18,20 @@ use hyper::Client;
 use hyper::header::ContentType;
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
-use std::io::Read;
+use serde::ser::Serialize;
+use serde::de::Deserialize;
 
+use std::fmt::Debug;
+use std::io::Read;
 use std::time::Duration;
 
 pub mod errors;
 use self::errors::*;
 
-pub mod types;
-use types::{request,response};
+pub mod api;
+use api::{request,response};
 
-pub struct Bot {
+pub struct HyperBot {
     base: String,
     client: Client,
     offset: u64,
@@ -38,9 +46,9 @@ struct Response {
 }
 
 
-impl Bot {
-    pub fn new(token: &str) -> Bot {
-        let mut bot = Bot {
+impl HyperBot {
+    pub fn new(token: &str) -> HyperBot {
+        let mut bot = HyperBot {
             base: format!("https://api.telegram.org/bot{}/", token),
             client: Client::new(),
             offset: 0,
@@ -49,66 +57,45 @@ impl Bot {
         bot.client.set_read_timeout(Some(bot.timeout));
         bot
     }
-    fn send(&mut self, method: &str, body: &str) -> Result<serde_json::Value> {
+}
+impl api::Client for HyperBot {
+    fn set_updates_offset(&mut self, offset: u64) { self.offset = offset; }
+    fn get_updates_offset(&self) -> u64 { self.offset }
+
+    fn send<S: Serialize+Debug,D: Deserialize>(&mut self, method: &str, body: &S) -> Result<D> {
+        let serialized = serde_json::to_string(body).unwrap();
         let mut res = self.client
             .post(&format!("{}{}", &self.base, method))
             .header(ContentType(Mime(TopLevel::Application,
                                      SubLevel::Json,
                                      vec![(Attr::Charset, Value::Utf8)])))
-            .body(body)
+            .body(&serialized)
             .send()
             .chain_err(|| format!("request for `{}` failed",method))?;
         let mut s = String::new();
+        debug!("[Bot::send] Sending `{}`: {:?}",method, body);
         res.read_to_string(&mut s).chain_err(|| "cannot parse response")?;
-        let serialized : Response = serde_json::from_str(&s).chain_err(|| "cannot parse api response")?;
-        match serialized.ok {
-            true => Ok(serialized.result.unwrap()),
-            false => bail!(ErrorKind::ApiError(serialized.description.unwrap()))
+        debug!("[Bot::send] Received {}",&s);
+        let deserialized : Response = serde_json::from_str(&s).chain_err(|| "cannot parse api response")?;
+        debug!("[Bot::send] Parsed {:?}",&deserialized);
+        match deserialized.ok {
+            true => {
+                let response = serde_json::from_value(deserialized.result.unwrap())
+                    .chain_err(|| format!("cannot parse result of `{}`",method))?;
+                Ok(response)
+            },
+            false => bail!(ErrorKind::ApiError(deserialized.description.unwrap()))
         }
-    }
-    pub fn get_chat(&mut self, chat_id: u64) -> Result<response::Chat> {
-        let body = request::Chat { chat_id : chat_id};
-        let deserialized = serde_json::to_string(&body).unwrap();
-        let resp = self.send("getChat",&deserialized)?;
-        let serialized = serde_json::from_value(resp).chain_err(|| "cannot parse response of `getChat`")?;
-        Ok(serialized)
-    }
-    pub fn get_me(&mut self) -> Result<response::User> {
-        let resp = self.send("getMe","")?;
-        let serialized = serde_json::from_value(resp).chain_err(|| "cannot parse response of `getMe`")?;
-        Ok(serialized)
-    }
-    pub fn get_updates(&mut self, timeout: u32) -> Result<Vec<response::Update>> {
-        let body = request::Update { offset: self.offset, timeout: std::cmp::min(100,timeout) as i32};
-        let deserialized = serde_json::to_string(&body).unwrap();
-        let resp = self.send("getUpdates",&deserialized)?;
-        let mut serialized: Vec<response::Update> = serde_json::from_value(resp)
-            .chain_err(|| "cannot parse response of `getUpdates`")?;
-        let new_offset = serialized.iter().fold(self.offset,|m,u| std::cmp::max(m,u.update_id)) + 1;
-        // Telegram sometimes sends already acknowleged messages
-        // A workaround seems to be to reset the offset whenever there are no
-        // new messages in the update
-        serialized.retain(|u| u.update_id >= self.offset);
-        self.offset = new_offset;
-        if serialized.len()==0 {
-            self.offset=0;
-        }
-        Ok(serialized)
-    }
-    pub fn send_message(&mut self, msg: &request::Message) -> Result<response::Message> {
-        let deserialized = serde_json::to_string(msg).unwrap();
-        let resp = self.send("sendMessage",&deserialized)?;
-        let serialized = serde_json::from_value(resp).chain_err(|| "cannot parse response of `sendMessage`")?;
-        Ok(serialized)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::api::Client;
     #[test]
     fn it_works() {
-        let mut bot = Bot::new("232529554:AAG_xutLTVJvmzQ-pQp_6PNij_SCgE4uqCk");
+        let mut bot = HyperBot::new("232529554:AAG_xutLTVJvmzQ-pQp_6PNij_SCgE4uqCk");
         println!("{:?}", bot.get_me());
     }
 }

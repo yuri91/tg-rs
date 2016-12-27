@@ -9,3 +9,7 @@ serde_derive = "0.8"
 serde_json = "0.8"
 hyper = "0.9.14"
 error-chain = "0.7.1"
+log = "0.3.6"
+
+[dev-dependencies]
+env_logger = "0.3.5"
