@@ -37,14 +37,6 @@ pub struct HyperBot {
     offset: u64,
     timeout: Duration
 }
-#[derive(Clone,Debug,Deserialize)]
-struct Response {
-    ok: bool,
-    result: Option<serde_json::Value>,
-    error_code: Option<u16>,
-    description: Option<String>
-}
-
 
 impl HyperBot {
     pub fn new(token: &str) -> HyperBot {
@@ -58,12 +50,14 @@ impl HyperBot {
         bot
     }
 }
-impl api::Client for HyperBot {
+impl api::Api for HyperBot {
     fn set_updates_offset(&mut self, offset: u64) { self.offset = offset; }
     fn get_updates_offset(&self) -> u64 { self.offset }
 
     fn send<S: Serialize+Debug,D: Deserialize>(&mut self, method: &str, body: &S) -> Result<D> {
+        debug!("[Bot::send] Serializing `{}`: {:?}",method, body);
         let serialized = serde_json::to_string(body).unwrap();
+        debug!("[Bot::send] Sending `{}`: {}",method, serialized);
         let mut res = self.client
             .post(&format!("{}{}", &self.base, method))
             .header(ContentType(Mime(TopLevel::Application,
@@ -73,19 +67,11 @@ impl api::Client for HyperBot {
             .send()
             .chain_err(|| format!("request for `{}` failed",method))?;
         let mut s = String::new();
-        debug!("[Bot::send] Sending `{}`: {:?}",method, body);
         res.read_to_string(&mut s).chain_err(|| "cannot parse response")?;
         debug!("[Bot::send] Received {}",&s);
-        let deserialized : Response = serde_json::from_str(&s).chain_err(|| "cannot parse api response")?;
+        let deserialized : response::Response = serde_json::from_str(&s).chain_err(|| "cannot parse api response")?;
         debug!("[Bot::send] Parsed {:?}",&deserialized);
-        match deserialized.ok {
-            true => {
-                let response = serde_json::from_value(deserialized.result.unwrap())
-                    .chain_err(|| format!("cannot parse result of `{}`",method))?;
-                Ok(response)
-            },
-            false => bail!(ErrorKind::ApiError(deserialized.description.unwrap()))
-        }
+        deserialized.into_result()
     }
 }
 

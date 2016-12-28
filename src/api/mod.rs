@@ -7,7 +7,7 @@ use std::fmt::Debug;
 use std::cmp::{max,min};
 use super::errors::*;
 
-pub trait Client {
+pub trait Api {
     fn send<S: Serialize+Debug,D: Deserialize>(&mut self, method: &str, body: &S) -> Result<D>;
     fn set_updates_offset(&mut self, offset: u64);
     fn get_updates_offset(&self) -> u64;
@@ -41,5 +41,8 @@ pub trait Client {
     }
     fn send_message(&mut self, msg: &request::Message) -> Result<response::Message> {
         self.send("sendMessage",msg)
+    }
+    fn answer_inline_query(&mut self, answer: &request::InlineQueryAnswer) -> Result<bool> {
+        self.send("answerInlineQuery",answer)
     }
 }
