@@ -6,9 +6,16 @@ use tg::HyperBot;
 use tg::errors::*;
 use tg::api::{Api,request,response};
 
+use std::fs::File;
+use std::io::Read;
+
 fn main() {
     env_logger::init().unwrap();
-    let mut bot = HyperBot::new("232529554:AAG_xutLTVJvmzQ-pQp_6PNij_SCgE4uqCk");
+
+    let mut f = File::open("TOKEN").expect("missing TOKEN file");
+    let mut token = String::new();
+    f.read_to_string(&mut token).expect("cannot read TOKEN file");
+    let mut bot = HyperBot::new(&token);
     loop {
         let updates = bot.get_updates(50).expect("get_updates failed");
         for u in updates {
