@@ -3,7 +3,6 @@ extern crate tg;
 extern crate log;
 extern crate env_logger;
 use tg::HyperBot;
-use tg::errors::*;
 use tg::api::{Api,request,response};
 
 use std::fs::File;
@@ -22,27 +21,20 @@ fn main() {
             info!("update: {:?}",&u);
             match u.content {
                 response::UpdateKind::Message(rcv) => {
-                    let send = request::Message {
-                        chat_id: rcv.from.unwrap().id,
-                        text: &rcv.text.unwrap(),
-                        reply_to_message_id: Some(rcv.message_id),
-                        .. Default::default()
-                    };
+                    let send = request::Message::new(rcv.from.unwrap().id,rcv.text.unwrap())
+                        .with_reply_to_message_id(rcv.message_id);
                     info!("send_message request: {:?}",&send);
                     info!("send_message response: {:?}",&bot.send_message(&send));
                 },
                 response::UpdateKind::InlineQuery(i) => {
-                    let a = request::InlineQueryAnswer {
-                        inline_query_id: &i.id,
-                        results: vec![request::InlineQueryResult::Article{
+                    let a = request::InlineQueryAnswer::new(&i.id,
+                        vec![request::InlineQueryResult::Article{
                             title: "much choice",
                             id: "1",
-                            input_message_content: request::InputMessageContent::Text {
-                                message_text: "rust rulez"
-                            }
+                            input_message_content: request::InputMessageContent::text("rust rulez")
                         }],
-                    };
-                    bot.answer_inline_query(&a);
+                    );
+                    info!("answer_inline_query response: {:?}",&bot.answer_inline_query(&a));
                 },
                 _ => println!("unsupported update kind: {:?}",&u.content)
             }
